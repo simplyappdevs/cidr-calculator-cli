@@ -1,0 +1,43 @@
+{
+  "name": "@simplyappdevs/cidr-calculator-cli",
+  "description": "CLI to calculate CIDR block (NPM Package)",
+  "version": "0.0.1",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "scripts": {
+    "tsc": "tsc",
+    "del": "rimraf",
+    "test": "jest",
+    "cp": "fse copy",
+    "cpesmpkg": "npm run cp ./package-esm.json ./dist/esm/package.json",
+    "cpcjspkg": "npm run cp ./package-cjs.json ./dist/cjs/package.json",
+    "build:common": "tsc --project tsconfig-cjs.json",
+    "build:esm": "tsc --project tsconfig.json",
+    "clean": "npm run del ./dist/*",
+    "clean:examples": "npm run del ./dist-examples/*",
+    "build": "npm run clean && npm run build:common && npm run build:esm && npm run cpesmpkg && npm run cpcjspkg",
+    "prepublishOnly": "npm run clean && npm run test && npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simplyappdevs/cidr-calculator-cli.git"
+  },
+  "keywords": [
+    "cidr",
+    "typescript",
+    "commander"
+  ],
+  "author": "SimplyAppDevs (requestinfo@simplyappdevs.com)",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/simplyappdevs/cidr-calculator-cli/issues"
+  },
+  "homepage": "https://github.com/simplyappdevs/cidr-calculator-cli#readme",
+  "devDependencies": {
+    "@atao60/fse-cli": "^0.1.7",
+    "@marsraptor/bitset": "^1.0.0",
+    "@types/node": "^16.3.3",
+    "rimraf": "^3.0.2",
+    "typescript": "^4.3.5"
+  }
+}
