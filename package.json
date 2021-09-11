@@ -3,19 +3,19 @@
   "description": "CLI to calculate CIDR block (NPM Package)",
   "version": "0.0.1",
   "type": "commonjs",
-  "main": "./dist/index.js",
+  "main": "./dist/cli.js",
+  "bin": {
+    "cidr": "./dist/cli.js"
+  },
   "scripts": {
     "tsc": "tsc",
     "del": "rimraf",
-    "test": "jest",
+    "test": "echo \"This package does not have UnitTest\" && exit 1",
     "cp": "fse copy",
-    "cpesmpkg": "npm run cp ./package-esm.json ./dist/esm/package.json",
-    "cpcjspkg": "npm run cp ./package-cjs.json ./dist/cjs/package.json",
-    "build:common": "tsc --project tsconfig-cjs.json",
-    "build:esm": "tsc --project tsconfig.json",
     "clean": "npm run del ./dist/*",
-    "clean:examples": "npm run del ./dist-examples/*",
-    "build": "npm run clean && npm run build:common && npm run build:esm && npm run cpesmpkg && npm run cpcjspkg",
+    "build": "npm run clean && npm run tsc",
+    "exec": "node ./dist/cli.js",
+    "exec:build": "npm run build && node ./dist/cli.js",
     "prepublishOnly": "npm run clean && npm run test && npm run build"
   },
   "repository": {
@@ -39,5 +39,9 @@
     "@types/node": "^16.3.3",
     "rimraf": "^3.0.2",
     "typescript": "^4.3.5"
+  },
+  "dependencies": {
+    "@simplyappdevs/cidr-calculator": "^1.0.1",
+    "commander": "^8.2.0"
   }
 }
