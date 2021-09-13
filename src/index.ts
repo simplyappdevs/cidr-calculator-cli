@@ -6,6 +6,22 @@
  * SimplyAppDevs Imports
  */
 import {CIDRModule} from '@simplyappdevs/cidr-calculator';
+import {Command, CommandImpl} from './command';
+
+/**
+ * Returns command line arguments configuration
+ * @returns Command object
+ */
+const configCommandArgs = (): Command => {
+  const cmd = new CommandImpl('cidr', 'Get CIDR information');
+
+  cmd.addArgument(['-c', '--cidr'], 'CIDR notation', 'N.N.N.N/CB', /.*/, '');
+
+  cmd.addArgument(['-i', '--ipv4'], 'IPv4 address', 'N.N.N.N', /.*/)
+    .addArgument(['-cb', '--cidr-block'], 'CIDR block', 'CB', /.*/);
+
+  return cmd;
+};
 
 /**
  * Entrypoing for cli
@@ -16,6 +32,12 @@ export default async function execCLI(argv: string[]): Promise<number> {
   let retVal: number = 0;
 
   try {
+    // config
+    const cmd = configCommandArgs();
+
+    // parse command lines
+
+    console.log(JSON.stringify(cmd as Command, undefined, 2));
   } catch (e) {
     retVal = 1;
 

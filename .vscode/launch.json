@@ -8,6 +8,7 @@
       "type": "node",
       "request": "launch",
       "name": "Launch Program",
+      "preLaunchTask": "npm: build",
       "runtimeExecutable": "node",
       "runtimeArgs": [
         "./dist/cli.js"
@@ -15,16 +16,13 @@
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "console": "externalTerminal",
+      "console": "integratedTerminal",
       "sourceMaps": true,
       "trace": true,
+      "smartStep": false,
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"
-      ],
-      "preLaunchTask": {
-        "task": "npm run build",
-        "type": "${workspaceFolder}"
-      }
+      ]
     }
   ]
 }

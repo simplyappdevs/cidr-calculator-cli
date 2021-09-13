@@ -8,6 +8,23 @@
 import {default as AppError, ErrorCodes} from './error';
 
 /**
+ * Constants
+ */
+const switchTest: RegExp = /^[\-]{1,2}[a-zA-Z]{1}[a-zA-Z0-9\-]{0,}/;
+
+/**
+ * Action needed after parsing arguments
+ */
+export enum ParsedActions {
+  Success = 0,
+  MissingCommand = 1,
+  MissingArg = 2,
+  Help = 3,
+  Usage = 4,
+  Version = 5
+}
+
+/**
  * Command definition
  */
 export interface Command {
@@ -206,10 +223,8 @@ export class CommandArgImpl implements CommandArg {
     }
 
     // check that it starts with -- and at least follow by 1 letter
-    const testArg = /^[-]{1,2}[a-zA-Z]{1,}$/g;
-
     argSwitches.forEach((val: string, index: number) => {
-      if (!testArg.test(val)) {
+      if (!switchTest.test(val)) {
         throw new AppError(ErrorCodes.PARAM_INVALID, `${val}`)
       }
     });
@@ -324,3 +339,153 @@ export class CommandArgImpl implements CommandArg {
     }
   }
 }
+
+/**
+ * Parse array of command line arguments
+ * @param cmds Array of commands for this program
+ * @param argv Command line arguments (excludes node and script path if from process.argv - pass process.argv.slice(2))
+ * @returns Tupple of action to take and the command specified
+ */
+const parseCommandArguments = (cmds: Command[], argv: string[]): [ParsedActions, Command?] => {
+  // retvals
+  let action: ParsedActions = ParsedActions.Success;
+  let cmd: Command | undefined;
+
+  // validate
+  if (cmds.length < 1) {
+    throw new AppError(ErrorCodes.PARAM_INVALID, `command array is empty`);
+  }
+
+  if (argv.length < 1) {
+    return [ParsedActions.Usage, undefined];
+  }
+
+  // command(s) must be in sequence
+  cmd = cmds.find((val: Command, index: number) => {
+    return val.command.toLowerCase() === argv[0].toLowerCase();
+  });
+
+  if (!cmd) {
+    action = ParsedActions.Usage;
+  } else if (!cmd.args || (cmd.args.length < 1)) {
+    // command with out switches
+    action = ParsedActions.Success;
+  } else {
+    // since we don't support nested command - we go to args next
+    argv = argv.slice(1);
+
+    // break up array into Map
+    const args = new Map<string, string>();
+
+    let key: string = '';
+
+    while (argv.length > 0) {
+      if (switchTest.test(argv[0])) {
+        // this is a switch
+        if (key !== '') {
+          // key already set but value is not
+          args.set(key, '');
+        }
+
+        key = argv[0];
+      } else {
+        // this is value
+        if (key !== '') {
+          // has key
+          args.set(key, argv[0]);
+        } else {
+          // error out
+          throw new AppError(ErrorCodes.CMDARG_NOKEY, argv[0]);
+        }
+      }
+
+      // remove 0
+      argv = argv.slice(1);
+    }
+
+    // loop through all CommandArgs and count how many matches for each
+    const cmdArgsWithValueCount = new WeakMap<CommandArg, number>();
+    const totalCmdArgsCount = new WeakMap<CommandArg, number>();
+
+    let cmdArgs: CommandArg[] = [];
+    let valueSetCount: number = 0;
+    let nextCA: CommandArg;
+
+    cmd.args.forEach((cmdArg: CommandArg, index: number) => {
+      // reset counters
+      valueSetCount = 0;
+      cmdArgs = [];
+
+      // match the first CommandArg switches
+      if (matchCommandArg(cmdArg, args)) {
+        ++valueSetCount;
+      }
+
+      if (valueSetCount > 0) {
+        // matched the first CmdArg - let's continue down this path
+        cmdArgs.push(cmdArg);
+
+        // temp pointer
+        nextCA = cmdArg;
+
+        while (nextCA.nextCommandArg) {
+          nextCA = nextCA.nextCommandArg;
+          cmdArgs.push(nextCA);
+
+          if (matchCommandArg(nextCA, args)) {
+            ++valueSetCount;
+          }
+        }
+      }
+
+      // total # of CommandArgs in this linked link - it will be > 0 only if the first CommandArg value is set
+      totalCmdArgsCount.set(cmdArg, cmdArgs.length);
+
+       // total CommandArgs  with value set - it will be > 0 only if the first CommandArg value is set
+      cmdArgsWithValueCount.set(cmdArg, valueSetCount);
+    });
+
+    // get all CommandArgs with matched
+    cmdArgs = cmd.args.filter((cmdArg: CommandArg, index: number) => {
+      return cmdArgsWithValueCount.get(cmdArg)! > 0;
+    });
+
+    if (cmdArgs.length === 0) {
+      // just one
+
+    }
+  }
+
+  return [action, cmd];
+};
+
+/**
+ * Returns whether CommandArgs value set or not
+ * @param cmdArg Command argument to look for in command line arguments
+ * @param args Command line arguments
+ * @returns True if value of CommandArg is set, False otherwise
+ */
+const matchCommandArg = (cmdArg: CommandArg, args: Map<string, string>): boolean => {
+  // find first switch
+  let swVal: string = '';
+  let found: boolean = false;
+
+  cmdArg.switches.forEach((sw: string, index: number) => {
+    if (args.has(sw)) {
+      // found it
+      swVal = args.get(sw) || '';
+
+      // only set value if it is not empty
+      if (swVal !== '') {
+        cmdArg.setValue(swVal);
+      }
+    }
+
+    // consider matched if value is not empty (this is to support switch without value but value has been set during configuration as default value)
+    if (cmdArg.value !== '') {
+      found = true;
+    }
+  });
+
+  return found;
+};
