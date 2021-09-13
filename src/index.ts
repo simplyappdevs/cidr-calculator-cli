@@ -6,7 +6,7 @@
  * SimplyAppDevs Imports
  */
 import {CIDRModule} from '@simplyappdevs/cidr-calculator';
-import {Command, CommandImpl} from './command';
+import {default as parseCommandArguments, Command, CommandImpl} from './command';
 
 /**
  * Returns command line arguments configuration
@@ -36,8 +36,10 @@ export default async function execCLI(argv: string[]): Promise<number> {
     const cmd = configCommandArgs();
 
     // parse command lines
+    const [action, selCmd] = parseCommandArguments([cmd], argv);
 
-    console.log(JSON.stringify(cmd as Command, undefined, 2));
+    console.log(action);
+    console.log(JSON.stringify(selCmd, undefined, 2));
   } catch (e) {
     retVal = 1;
 

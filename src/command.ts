@@ -36,6 +36,15 @@ export interface Command {
 }
 
 /**
+ * Selected Command definition
+ */
+export interface SelectedCommand {
+  readonly command: string;
+  readonly description: string;
+  readonly args?: SelectedCommandArg[];
+}
+
+/**
  * Command argument definition
  */
 export interface CommandArg {
@@ -48,6 +57,18 @@ export interface CommandArg {
   addArgument(opts: CommandArgsOptions): CommandArg;
   addArgument(switches: string[], desc: string, valuePatternText: string, valuePatternRegEx: RegExp, defaultVal?: string): CommandArg;
   setValue: (val: string) => boolean;
+}
+
+/**
+ * Selected CommandArg definition
+ */
+export interface SelectedCommandArg {
+  readonly switches: string[];
+  readonly description: string;
+  readonly valuePatternText: string;
+  readonly valuePatternRegEx: RegExp;
+  readonly value: string;
+  readonly nextCommandArg?: SelectedCommandArg;
 }
 
 /**
@@ -107,7 +128,7 @@ export class CommandImpl implements Command {
   /**
    * Gets command line arguments for the command
    */
-  public get arguments(): CommandArg[] {
+  public get args(): CommandArg[] {
     return this._args;
   }
 
@@ -346,10 +367,11 @@ export class CommandArgImpl implements CommandArg {
  * @param argv Command line arguments (excludes node and script path if from process.argv - pass process.argv.slice(2))
  * @returns Tupple of action to take and the command specified
  */
-const parseCommandArguments = (cmds: Command[], argv: string[]): [ParsedActions, Command?] => {
+export default function parseCommandArguments(cmds: Command[], argv: string[]): [ParsedActions, SelectedCommand?] {
   // retvals
   let action: ParsedActions = ParsedActions.Success;
   let cmd: Command | undefined;
+  let selCmd: SelectedCommand | undefined;
 
   // validate
   if (cmds.length < 1) {
@@ -357,6 +379,7 @@ const parseCommandArguments = (cmds: Command[], argv: string[]): [ParsedActions,
   }
 
   if (argv.length < 1) {
+    // display usage of this program
     return [ParsedActions.Usage, undefined];
   }
 
@@ -366,15 +389,17 @@ const parseCommandArguments = (cmds: Command[], argv: string[]): [ParsedActions,
   });
 
   if (!cmd) {
+    // display Command usage
     action = ParsedActions.Usage;
-  } else if (!cmd.args || (cmd.args.length < 1)) {
+  } else if (!(cmd.args) || (cmd.args.length < 1)) {
     // command with out switches
     action = ParsedActions.Success;
+    selCmd = selectCommand(cmd);
   } else {
     // since we don't support nested command - we go to args next
     argv = argv.slice(1);
 
-    // break up array into Map
+    // break up array into Map (this way we create unique list)
     const args = new Map<string, string>();
 
     let key: string = '';
@@ -404,6 +429,8 @@ const parseCommandArguments = (cmds: Command[], argv: string[]): [ParsedActions,
     }
 
     // loop through all CommandArgs and count how many matches for each
+    // this code is going through all CommandArgs for future logic where
+    // we can choose the best CommandArg based on argv array
     const cmdArgsWithValueCount = new WeakMap<CommandArg, number>();
     const totalCmdArgsCount = new WeakMap<CommandArg, number>();
 
@@ -445,18 +472,30 @@ const parseCommandArguments = (cmds: Command[], argv: string[]): [ParsedActions,
       cmdArgsWithValueCount.set(cmdArg, valueSetCount);
     });
 
-    // get all CommandArgs with matched
-    cmdArgs = cmd.args.filter((cmdArg: CommandArg, index: number) => {
+    // TODO: For now, we'll just give priority based on the position of the array.
+    // In the future we'll make this to choose the "best" one
+    const selectedCmdArgs = cmd.args.find((cmdArg: CommandArg, index: number) => {
       return cmdArgsWithValueCount.get(cmdArg)! > 0;
     });
 
-    if (cmdArgs.length === 0) {
-      // just one
+    if (selectedCmdArgs) {
+      // clone the Command to only have the selected CommandArgs
+      selCmd = selectCommand(cmd, selectedCmdArgs);
 
+      if (cmdArgsWithValueCount.get(selectedCmdArgs)! < totalCmdArgsCount.get(selectedCmdArgs)!) {
+        // display usage for this command and for this commandargs
+        action = ParsedActions.Usage;
+      } else {
+        // success
+        action = ParsedActions.Success;
+      }
+    } else {
+      // display usage of this Command
+      action = ParsedActions.Usage;
     }
   }
 
-  return [action, cmd];
+  return [action, selCmd];
 };
 
 /**
@@ -488,4 +527,34 @@ const matchCommandArg = (cmdArg: CommandArg, args: Map<string, string>): boolean
   });
 
   return found;
+};
+
+/**
+ * Converts Command to SelectedCommand
+ * @param cmd Command to convert to SelectedCommand
+ * @param cmdArg CommandArg to convert to SelectedCommandArg
+ * @returns SelectedCommand
+ */
+const selectCommand = (cmd: Command, cmdArg?: CommandArg): SelectedCommand => {
+  return {
+    command:  cmd.command,
+    description: cmd.description,
+    args: cmdArg? [selectCommandArg(cmdArg)] : undefined
+  };
+};
+
+/**
+ * Converts CommandArg to SelectedCommandArg
+ * @param cmdArg CommandArg to convert to SelectedCommandArg
+ * @returns SelectedCommandArg
+ */
+const selectCommandArg = (cmdArg: CommandArg): SelectedCommandArg => {
+  return {
+    switches: cmdArg.switches,
+    description: cmdArg.description,
+    valuePatternText: cmdArg.valuePatternText,
+    valuePatternRegEx: cmdArg.valuePatternRegEx,
+    value: cmdArg.value,
+    nextCommandArg: cmdArg.nextCommandArg? selectCommandArg(cmdArg.nextCommandArg) : undefined
+  }
 };

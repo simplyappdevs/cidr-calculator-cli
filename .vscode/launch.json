@@ -11,7 +11,10 @@
       "preLaunchTask": "npm: build",
       "runtimeExecutable": "node",
       "runtimeArgs": [
-        "./dist/cli.js"
+        "./dist/cli.js",
+        "cidr",
+        "-i",
+        "-cb 10"
       ],
       "skipFiles": [
         "<node_internals>/**"
