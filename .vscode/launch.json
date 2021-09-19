@@ -14,7 +14,9 @@
         "./dist/cli.js",
         "cidr",
         "-i",
-        "-cb 10"
+        "172.21.168.10",
+        "-cb",
+        "10"
       ],
       "skipFiles": [
         "<node_internals>/**"
