@@ -383,7 +383,8 @@ export default function parseCommandArguments(cmds: Command[], argv: string[]): 
     return [ParsedActions.Usage, undefined];
   }
 
-  // command(s) must be in sequence
+  // command must be the first item in the argv
+  // TODO: future support for subcommand
   cmd = cmds.find((val: Command, index: number) => {
     return val.command.toLowerCase() === argv[0].toLowerCase();
   });
@@ -399,42 +400,30 @@ export default function parseCommandArguments(cmds: Command[], argv: string[]): 
     // since we don't support nested command - we go to args next
     argv = argv.slice(1);
 
-    // break up array into Map (this way we create unique list)
-    const args = new Map<string, string>();
+    // convert argv into a Map
+    // expect -switch (or --switch) and followed by value as the next token
+    // if next token match switch pattern, then we just set the value to ''
+    const args = convertArgvtoMap(argv);
 
-    let key: string = '';
+    /**
+     * The next section matches each expected command args set with
+     * what was passed in.
+     *
+     * Important to remember that cmd (Command) object has args (CommandArg) array
+     * which is the start of set of switches. So, if there are 3 elements in the args
+     * array, that means there are 3 sets of switches for this comment.
+     *
+     * Each CommandArg set (starts as an element in args array) has a linked-list to next switches in the
+     * same set.
+     *
+     * cmd.args[0.0]=>[0.1]=>[0.2] means the first set has 3 different switches in it
+     * cmd.args[1.0]=>[1.1] means the second set has 2 different switches in it
+     */
 
-    while (argv.length > 0) {
-      if (switchTest.test(argv[0])) {
-        // this is a switch
-        if (key !== '') {
-          // key already set but value is not
-          args.set(key, '');
-        }
+    const cmdArgsWithValueCount = new WeakMap<CommandArg, number>();  // for each CommandArg set, keep the number of switches specified in command line args
+    const totalCmdArgsCount = new WeakMap<CommandArg, number>();      // for each CommandArg set, count total number of switches
 
-        key = argv[0];
-      } else {
-        // this is value
-        if (key !== '') {
-          // has key
-          args.set(key, argv[0]);
-        } else {
-          // error out
-          throw new AppError(ErrorCodes.CMDARG_NOKEY, argv[0]);
-        }
-      }
-
-      // remove 0
-      argv = argv.slice(1);
-    }
-
-    // loop through all CommandArgs and count how many matches for each
-    // this code is going through all CommandArgs for future logic where
-    // we can choose the best CommandArg based on argv array
-    const cmdArgsWithValueCount = new WeakMap<CommandArg, number>();
-    const totalCmdArgsCount = new WeakMap<CommandArg, number>();
-
-    let cmdArgs: CommandArg[] = [];
+    let cmdArgs: CommandArg[] = [];   // flattens linked-list to array
     let valueSetCount: number = 0;
     let nextCA: CommandArg;
 
@@ -443,18 +432,21 @@ export default function parseCommandArguments(cmds: Command[], argv: string[]): 
       valueSetCount = 0;
       cmdArgs = [];
 
-      // match the first CommandArg switches
+      // match the first CommandArg switches (the beginning of a CommandArg set)
       if (matchCommandArg(cmdArg, args)) {
         ++valueSetCount;
       }
 
+      // we only record CommandArg with at least the first switch its value set. If not, we consider
+      // this set not specified (so cmdArgsWithValueCount will have value = 0 for this CommandArg)
       if (valueSetCount > 0) {
-        // matched the first CmdArg - let's continue down this path
+        // first switch in the CommandArg set
         cmdArgs.push(cmdArg);
 
         // temp pointer
         nextCA = cmdArg;
 
+        // walk through the linked-list
         while (nextCA.nextCommandArg) {
           nextCA = nextCA.nextCommandArg;
           cmdArgs.push(nextCA);
@@ -465,30 +457,50 @@ export default function parseCommandArguments(cmds: Command[], argv: string[]): 
         }
       }
 
-      // total # of CommandArgs in this linked link - it will be > 0 only if the first CommandArg value is set
+      // total # of switches for this CommandArg set
       totalCmdArgsCount.set(cmdArg, cmdArgs.length);
 
-       // total CommandArgs  with value set - it will be > 0 only if the first CommandArg value is set
+      // total # of switches with value for this CommandArg set
       cmdArgsWithValueCount.set(cmdArg, valueSetCount);
     });
 
-    // TODO: For now, we'll just give priority based on the position of the array.
-    // In the future we'll make this to choose the "best" one
-    const selectedCmdArgs = cmd.args.find((cmdArg: CommandArg, index: number) => {
-      return cmdArgsWithValueCount.get(cmdArg)! > 0;
+    /**
+     * Loop through the CommandArg set with the lowest number of switches
+     * and breakout as soon as we find one with all values set
+     */
+    // convert map to array first
+    const cmdArgsWithCount: Array<{cmdArg: CommandArg, count: number;}> = new Array<{cmdArg: CommandArg, count: number;}>();
+
+    cmd.args.forEach((cmdArg: CommandArg, index: number) => {
+      cmdArgsWithCount.push({cmdArg: cmdArg, count: totalCmdArgsCount.get(cmdArg)!});
     });
 
-    if (selectedCmdArgs) {
-      // clone the Command to only have the selected CommandArgs
-      selCmd = selectCommand(cmd, selectedCmdArgs);
+    // sort
+    cmdArgsWithCount.sort((a: {cmdArg: CommandArg, count: number;}, b: {cmdArg: CommandArg, count: number;}): number => {
+      return a.count < b.count ? -1 : a.count > b.count ? 1 : 0;
+    });
 
-      if (cmdArgsWithValueCount.get(selectedCmdArgs)! < totalCmdArgsCount.get(selectedCmdArgs)!) {
-        // display usage for this command and for this commandargs
-        action = ParsedActions.Usage;
-      } else {
-        // success
-        action = ParsedActions.Success;
+    // loop cmdArgsWithCount to convert CommandArg into SelectedCommandArg
+    // and set the selectedCmdArg for the first one with all values set
+    const selectedCmdArgs: SelectedCommandArg[] = [];
+    let selectedCmdArg: SelectedCommandArg | undefined;
+    let cmdArgToSelectedCmdArg: SelectedCommandArg;
+
+    cmdArgsWithCount.forEach((argWithCount: {cmdArg: CommandArg, count: number;}, index: number) => {
+      cmdArgToSelectedCmdArg = selectCommandArg(argWithCount.cmdArg);
+      selectedCmdArgs.push(cmdArgToSelectedCmdArg);
+
+      if ((!selectedCmdArg) && (argWithCount.count === cmdArgsWithValueCount.get(argWithCount.cmdArg))) {
+        selectedCmdArg = cmdArgToSelectedCmdArg;
       }
+    });
+
+    if (selectedCmdArg) {
+      // clone the Command to only have the selected CommandArgs
+      selCmd = selectCommand(cmd);
+
+      // display usage for this command and for this commandargs
+      action = ParsedActions.Usage;
     } else {
       // display usage of this Command
       action = ParsedActions.Usage;
@@ -496,6 +508,46 @@ export default function parseCommandArguments(cmds: Command[], argv: string[]): 
   }
 
   return [action, selCmd];
+};
+
+/**
+ * Return array of switches and values as Map<string, string>
+ * @param argv Array of switches and values
+ * @returns Map<string, string> of argv
+ */
+const convertArgvtoMap = (argv: string[]): Map<string, string> => {
+  const args = new Map<string, string>();
+
+  let key: string = '';
+
+  while (argv.length > 0) {
+    if (switchTest.test(argv[0])) {
+      // this is a switch
+      if (key !== '') {
+        // key already set but value is not
+        args.set(key, '');
+      }
+
+      key = argv[0];
+    } else {
+      // this is value
+      if (key !== '') {
+        // has key
+        args.set(key, argv[0]);
+
+        // reset key
+        key = '';
+      } else {
+        // error out since we encounter non-switch not preceeded by one
+        throw new AppError(ErrorCodes.CMDARG_NOKEY, argv[0]);
+      }
+    }
+
+    // remove first element
+    argv = argv.slice(1);
+  }
+
+  return args;
 };
 
 /**
@@ -515,12 +567,15 @@ const matchCommandArg = (cmdArg: CommandArg, args: Map<string, string>): boolean
       swVal = args.get(sw) || '';
 
       // only set value if it is not empty
+      // the idea here is if value is not set, we don't want to overwrite the value already exist in the CommandArg object
+      // which can be set by other switch or as default value
       if (swVal !== '') {
-        cmdArg.setValue(swVal);
+        cmdArg.setValue(swVal); // setValue() does other validation and this may throw exception
       }
     }
 
-    // consider matched if value is not empty (this is to support switch without value but value has been set during configuration as default value)
+    // consider matched if value is not empty
+    // do not use swVal since CommandArg object may have the value set already
     if (cmdArg.value !== '') {
       found = true;
     }
