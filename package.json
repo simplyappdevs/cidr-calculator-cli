@@ -15,7 +15,7 @@
     "clean": "npm run del ./dist/*",
     "build": "npm run clean && npm run tsc",
     "exec": "node ./dist/cli.js",
-    "exec:build": "npm run build && node ./dist/cli.js",
+    "exec:build": "npm run build && npm run exec",
     "prepublishOnly": "npm run clean && npm run test && npm run build"
   },
   "repository": {

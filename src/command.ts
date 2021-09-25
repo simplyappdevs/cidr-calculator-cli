@@ -1,6 +1,88 @@
 /**
  * Command + arguments builder
+ *
+ * exec command <set of switches>
+ *
+ * command:
+ *  A word to indicate the action to take
+ *  A command may have 0 to N sets of switches
+ *
+ * set of switches:
+ *  Collection of switches to supply to a command
+ *  A set is defined by a main switch followed by additional switches
+ *    main-switch switch-1 switch-2 switch-N
+ *
+ * switch:
+ *  Start with a dash and followed by one or more character (commonly up to 2 characters)
+ *  Start with double double dashes and followed by a word or multiple words concatenated by a delimeter other than whitespace
+ *  Switch is commonly followed by a value and must be surrounded by quotes if value contains whitespace
+ *
+ * cidrexec cidr -c/--cidr <cidr_notation>
+ *  command: cidr
+ *  set of switches:
+ *    main switch: -c or --cidr
+ *      value: cidr_notation
+ *
+ * cidrexec cidr -i/--ip <ipv4> -cb/--cidr-block <cidr_number>
+ *  commandL cidr
+ *  set of switches:
+ *    main switch: -i or --ip
+ *      value: ipv4
+ *    switch-1: -cb or --cird-block
+ *      value: cidr number
+ *
+ * Objects:
+ *  Command is the configuration of a command
+ *    Contains description (for usage)
+ *    Contains an array of CommandArg which is for holding set(s) of switches
+ *      CommandArg in this array MUST be the main switch for the set of switches
+ *
+ *  CommandArg is the configuration of switch
+ *    Contains description (for usage)
+ *    Contains an array of string and must have at least 1 switch (either - or --)
+ *      The idea is to allow multiple switch values for a CommandArg (such as -c and --cidr)
+ *    Contains text pattern for the value (for usage)
+ *    Contains regex pattern for the value (for validation - use .* to accept any value)
+ *    Value
+ *      By default it is an empty string
+ *      It can be set by passing in default value when constructing the object
+ *      It can be set by calling setValue()
+ *        Value will only be validated if set by setValue()
+ *        No action will be taken if value is empty string (this is to preserve default value or previously set value)
+ *        No action will be taken if value failed validation (regex pattern)
+ *
  */
+
+// const sample = {
+//   command: 'cidr',
+//   description: 'Calculate CIDR',
+//   args: [
+//     {
+//       switches: ['-c', '--cidr'],
+//       description: 'CIDR notation',
+//       valuePatternText: 'N.N.N.N/CB',
+//       valuePatternRegEx: /.*/,
+//       value: '',
+//       nextCommandArg: undefined
+//     },
+//     {
+//       switches: ['-i', '--ipv4'],
+//       description: 'IPv4',
+//       valuePatternText: 'N.N.N.N',
+//       valuePatternRegEx: /.*/,
+//       value: '',
+//       nextCommandArg: {
+//         switches: ['-cb', '--cidr-block'],
+//         description: 'CIDR block',
+//         valuePatternText: 'CB',
+//         valuePatternRegEx: /.*/,
+//         value: '',
+//         nextCommandArg: undefined
+//       }
+//     }
+//   ]
+// };
+
 
 /**
  * App Imports
@@ -11,6 +93,7 @@ import {default as AppError, ErrorCodes} from './error';
  * Constants
  */
 const switchTest: RegExp = /^[\-]{1,2}[a-zA-Z]{1}[a-zA-Z0-9\-]{0,}/;
+const cmdTest: RegExp = /^[a-zA-Z0-9]{1,}$/;
 
 /**
  * Action needed after parsing arguments
@@ -21,7 +104,8 @@ export enum ParsedActions {
   MissingArg = 2,
   Help = 3,
   Usage = 4,
-  Version = 5
+  FullUsage = 5,
+  Version = 6
 }
 
 /**
@@ -48,7 +132,7 @@ export interface SelectedCommand {
  * Command argument definition
  */
 export interface CommandArg {
-  readonly switches: string[];
+  readonly switches: Readonly<string[]>;
   readonly description: string;
   readonly valuePatternText: string;
   readonly valuePatternRegEx: RegExp;
@@ -63,7 +147,7 @@ export interface CommandArg {
  * Selected CommandArg definition
  */
 export interface SelectedCommandArg {
-  readonly switches: string[];
+  readonly switches: Readonly<string[]>;
   readonly description: string;
   readonly valuePatternText: string;
   readonly valuePatternRegEx: RegExp;
@@ -103,7 +187,7 @@ export class CommandImpl implements Command {
       throw new AppError(ErrorCodes.PARAM_MISSING, 'command');
     }
 
-    if (command.startsWith('-') || command.startsWith('--')) {
+    if (!cmdTest.test(command)) {
       throw new AppError(ErrorCodes.PARAM_INVALID, `${command}`);
     }
 
@@ -241,6 +325,9 @@ export class CommandArgImpl implements CommandArg {
 
         return val;
       });
+
+      // sort it
+      argSwitches.sort();
     }
 
     // check that it starts with -- and at least follow by 1 letter
@@ -265,7 +352,7 @@ export class CommandArgImpl implements CommandArg {
   /**
    * Gets command line switches
    */
-  public get switches(): string[] {
+  public get switches(): Readonly<string[]> {
     return this._switches;
   }
 
@@ -380,26 +467,32 @@ export default function parseCommandArguments(cmds: Command[], argv: string[]): 
 
   if (argv.length < 1) {
     // display usage of this program
-    return [ParsedActions.Usage, undefined];
+    return [ParsedActions.FullUsage, undefined];
   }
 
   // command must be the first item in the argv
   // TODO: future support for subcommand
+  const requestedCmd: string = argv[0].toLowerCase();
+
   cmd = cmds.find((val: Command, index: number) => {
-    return val.command.toLowerCase() === argv[0].toLowerCase();
+    return val.command.toLowerCase() === requestedCmd;
   });
 
+  // remove command
+  argv = argv.slice(1);
+
   if (!cmd) {
-    // display Command usage
-    action = ParsedActions.Usage;
+    // display full usage
+    action = ParsedActions.FullUsage;
   } else if (!(cmd.args) || (cmd.args.length < 1)) {
     // command with out switches
     action = ParsedActions.Success;
     selCmd = selectCommand(cmd);
+  } else if (argv.length === 0) {
+    // display command usage (since command expects swtiches but we have no more switches)
+    action = ParsedActions.Usage;
+    selCmd = selectCommand(cmd);
   } else {
-    // since we don't support nested command - we go to args next
-    argv = argv.slice(1);
-
     // convert argv into a Map
     // expect -switch (or --switch) and followed by value as the next token
     // if next token match switch pattern, then we just set the value to ''
@@ -420,88 +513,45 @@ export default function parseCommandArguments(cmds: Command[], argv: string[]): 
      * cmd.args[1.0]=>[1.1] means the second set has 2 different switches in it
      */
 
-    const cmdArgsWithValueCount = new WeakMap<CommandArg, number>();  // for each CommandArg set, keep the number of switches specified in command line args
-    const totalCmdArgsCount = new WeakMap<CommandArg, number>();      // for each CommandArg set, count total number of switches
+    const setCmdArgsCount = new WeakMap<CommandArg, number>();            // for each set, count total number of CommandArg
+    const setCmdArgsWithValueCount = new WeakMap<CommandArg, number>();   // for each set, count total number of CommandArg with value set (not empty string)
 
-    let cmdArgs: CommandArg[] = [];   // flattens linked-list to array
-    let valueSetCount: number = 0;
-    let nextCA: CommandArg;
-
-    cmd.args.forEach((cmdArg: CommandArg, index: number) => {
-      // reset counters
-      valueSetCount = 0;
-      cmdArgs = [];
-
-      // match the first CommandArg switches (the beginning of a CommandArg set)
-      if (matchCommandArg(cmdArg, args)) {
-        ++valueSetCount;
-      }
-
-      // we only record CommandArg with at least the first switch its value set. If not, we consider
-      // this set not specified (so cmdArgsWithValueCount will have value = 0 for this CommandArg)
-      if (valueSetCount > 0) {
-        // first switch in the CommandArg set
-        cmdArgs.push(cmdArg);
-
-        // temp pointer
-        nextCA = cmdArg;
-
-        // walk through the linked-list
-        while (nextCA.nextCommandArg) {
-          nextCA = nextCA.nextCommandArg;
-          cmdArgs.push(nextCA);
-
-          if (matchCommandArg(nextCA, args)) {
-            ++valueSetCount;
-          }
-        }
-      }
-
-      // total # of switches for this CommandArg set
-      totalCmdArgsCount.set(cmdArg, cmdArgs.length);
-
-      // total # of switches with value for this CommandArg set
-      cmdArgsWithValueCount.set(cmdArg, valueSetCount);
-    });
+    matchCommandArgs(cmd, args, setCmdArgsCount, setCmdArgsWithValueCount);
 
     /**
-     * Loop through the CommandArg set with the lowest number of switches
-     * and breakout as soon as we find one with all values set
+     * Convert Map of sets into Array so that we can sort it from small > large (ignoring count=0)
      */
-    // convert map to array first
     const cmdArgsWithCount: Array<{cmdArg: CommandArg, count: number;}> = new Array<{cmdArg: CommandArg, count: number;}>();
 
-    cmd.args.forEach((cmdArg: CommandArg, index: number) => {
-      cmdArgsWithCount.push({cmdArg: cmdArg, count: totalCmdArgsCount.get(cmdArg)!});
+    cmd.args.forEach((cmdArg: CommandArg) => {
+      let count = setCmdArgsCount.get(cmdArg)!;
+
+      if (count > 0) {
+        cmdArgsWithCount.push({cmdArg: cmdArg, count: count});
+      }
     });
 
-    // sort
     cmdArgsWithCount.sort((a: {cmdArg: CommandArg, count: number;}, b: {cmdArg: CommandArg, count: number;}): number => {
       return a.count < b.count ? -1 : a.count > b.count ? 1 : 0;
     });
 
-    // loop cmdArgsWithCount to convert CommandArg into SelectedCommandArg
-    // and set the selectedCmdArg for the first one with all values set
-    const selectedCmdArgs: SelectedCommandArg[] = [];
-    let selectedCmdArg: SelectedCommandArg | undefined;
-    let cmdArgToSelectedCmdArg: SelectedCommandArg;
-
-    cmdArgsWithCount.forEach((argWithCount: {cmdArg: CommandArg, count: number;}, index: number) => {
-      cmdArgToSelectedCmdArg = selectCommandArg(argWithCount.cmdArg);
-      selectedCmdArgs.push(cmdArgToSelectedCmdArg);
-
-      if ((!selectedCmdArg) && (argWithCount.count === cmdArgsWithValueCount.get(argWithCount.cmdArg))) {
-        selectedCmdArg = cmdArgToSelectedCmdArg;
-      }
+    /**
+     * Winner: Set with the smallest CommandArg count with all of the values set
+     */
+    const selectedCmdArg = cmdArgsWithCount.find((argWithCount: {cmdArg: CommandArg, count: number;}) => {
+      return (argWithCount.count === setCmdArgsWithValueCount.get(argWithCount.cmdArg));
     });
 
     if (selectedCmdArg) {
-      // clone the Command to only have the selected CommandArgs
-      selCmd = selectCommand(cmd);
+      // we have a winner - convert Command and CommandArg
+      selCmd = selectCommand(cmd, selectedCmdArg.cmdArg);
 
       // display usage for this command and for this commandargs
-      action = ParsedActions.Usage;
+      action = ParsedActions.Success;
     } else {
+      // no winner - convert all the entire Command
+      selCmd = selectCommand(cmd);
+
       // display usage of this Command
       action = ParsedActions.Usage;
     }
@@ -551,6 +601,57 @@ const convertArgvtoMap = (argv: string[]): Map<string, string> => {
 };
 
 /**
+ * Match CommandArg sets to the command line arguments
+ * @param cmd Command with at least one CommandArg to process
+ * @param args Map of command line options and values
+ * @param setCmdArgsCount WeakMap of CommandArg to store total number CommandArg in a set
+ * @param setCmdArgsWithValueCount WeapMap of CommandArg to store total number of CommandArg with value set (not empty string)
+ */
+const matchCommandArgs = (cmd: Command, args: Map<string, string>, setCmdArgsCount: WeakMap<CommandArg, number>, setCmdArgsWithValueCount: WeakMap<CommandArg, number>): void => {
+  let cmdArgs: CommandArg[] = [];   // flattens linked-list to array
+  let valueSetCount: number = 0;
+  let nextCA: CommandArg;
+
+  // this function should only be called with Command that as at least 1 CommandArg
+  cmd.args!.forEach((cmdArg: CommandArg) => {
+    // reset counters
+    valueSetCount = 0;
+    cmdArgs = [];
+
+    // match the first CommandArg switches (the beginning of a CommandArg set)
+    if (matchCommandArg(cmdArg, args)) {
+      ++valueSetCount;
+    }
+
+    // we only record CommandArg with at least the first switch its value set. If not, we consider
+    // this set not specified (so cmdArgsWithValueCount will have value = 0 for this CommandArg)
+    if (valueSetCount > 0) {
+      // first switch in the CommandArg set
+      cmdArgs.push(cmdArg);
+
+      // temp pointer
+      nextCA = cmdArg;
+
+      // walk through the linked-list
+      while (nextCA.nextCommandArg) {
+        nextCA = nextCA.nextCommandArg;
+        cmdArgs.push(nextCA);
+
+        if (matchCommandArg(nextCA, args)) {
+          ++valueSetCount;
+        }
+      }
+    }
+
+    // total # of switches for this CommandArg set
+    setCmdArgsCount.set(cmdArg, cmdArgs.length);
+
+    // total # of switches with value for this CommandArg set
+    setCmdArgsWithValueCount.set(cmdArg, valueSetCount);
+  });
+};
+
+/**
  * Returns whether CommandArgs value set or not
  * @param cmdArg Command argument to look for in command line arguments
  * @param args Command line arguments
@@ -587,15 +688,30 @@ const matchCommandArg = (cmdArg: CommandArg, args: Map<string, string>): boolean
 /**
  * Converts Command to SelectedCommand
  * @param cmd Command to convert to SelectedCommand
- * @param cmdArg CommandArg to convert to SelectedCommandArg
+ * @param cmdArg CommandArg to convert to SelectedCommandArg (if specified will only convert this CommandArg instead of what are in Command.args)
  * @returns SelectedCommand
  */
 const selectCommand = (cmd: Command, cmdArg?: CommandArg): SelectedCommand => {
   return {
     command:  cmd.command,
     description: cmd.description,
-    args: cmdArg? [selectCommandArg(cmdArg)] : undefined
+    args: cmdArg ? [selectCommandArg(cmdArg)] : selectCommandArgs(cmd.args)
   };
+};
+
+/**
+ * Converts from array of CommandArg to SelectedCommandArg
+ * @param cmdArgs Array of CommandArg to convert to SelectedCommandArg
+ * @returns Array of SelectedCommandArg
+ */
+const selectCommandArgs = (cmdArgs: CommandArg[] | undefined): SelectedCommandArg[] | undefined => {
+  if (!cmdArgs) {
+    return undefined;
+  }
+
+  return cmdArgs.map((cmdArg: CommandArg): SelectedCommandArg => {
+    return selectCommandArg(cmdArg);
+  });
 };
 
 /**
