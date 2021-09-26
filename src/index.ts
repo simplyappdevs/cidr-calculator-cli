@@ -3,24 +3,26 @@
  */
 
 /**
+ * App Imports
+ */
+import {default as parseCommandArguments, Command, CommandImpl, ParsedActions} from './command';
+import {default as execCIDR, getCIDRCommandLineArgs} from './exec_cidr';
+
+/**
  * SimplyAppDevs Imports
  */
 import {CIDRModule} from '@simplyappdevs/cidr-calculator';
-import {default as parseCommandArguments, Command, CommandImpl} from './command';
 
 /**
- * Returns command line arguments configuration
- * @returns Command object
+ * Returns Command configuration
+ * @returns Array of Command objects
  */
-const configCommandArgs = (): Command => {
-  const cmd = new CommandImpl('cidr', 'Get CIDR information');
+const configCommandArgs = (): Command[] => {
+  const cmds: Command[] = [];
 
-  cmd.addArgument(['-c', '--cidr'], 'CIDR notation', 'N.N.N.N/CB', /.*/, '');
+  cmds.push(getCIDRCommandLineArgs());
 
-  cmd.addArgument(['-i', '--ipv4'], 'IPv4 address', 'N.N.N.N', /.*/)
-    .addArgument(['-cb', '--cidr-block'], 'CIDR block', 'CB', /.*/);
-
-  return cmd;
+  return cmds;
 };
 
 /**
@@ -33,13 +35,45 @@ export default async function execCLI(argv: string[]): Promise<number> {
 
   try {
     // config
-    const cmd = configCommandArgs();
+    const cmds = configCommandArgs();
 
     // parse command lines
-    const [action, selCmd] = parseCommandArguments([cmd], argv);
+    const [action, selCmd] = parseCommandArguments(cmds, argv);
 
-    console.log(action);
-    console.log(JSON.stringify(selCmd, undefined, 2));
+    switch (action) {
+      case ParsedActions.FullUsage:
+        console.log('Show full usage');
+        break;
+
+      case ParsedActions.Usage:
+        console.log('Show command usage');
+        break;
+
+      case ParsedActions.Help:
+        console.log('Show help');
+        break;
+
+      case ParsedActions.Version:
+        console.log('Show version');
+        break;
+
+      case ParsedActions.MissingCommand:
+        console.log('Missing command');
+        break;
+
+      case ParsedActions.MissingArg:
+        console.log('Missing argument');
+        break;
+
+      case ParsedActions.Success:
+        switch (selCmd?.command) {
+          case 'cidr':
+            execCIDR(selCmd);
+            break;
+        }
+
+        break;
+    }
   } catch (e) {
     retVal = 1;
 
