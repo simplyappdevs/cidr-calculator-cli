@@ -51,6 +51,9 @@
  *        No action will be taken if value is empty string (this is to preserve default value or previously set value)
  *        No action will be taken if value failed validation (regex pattern)
  *
+ * Built-in commands:
+ *  help
+ *  version
  */
 
 // const sample = {
@@ -341,6 +344,118 @@ const selectCommandArg = (cmdArg: CommandArg): SelectedCommandArg => {
     value: cmdArg.value,
     nextCommandArg: cmdArg.nextCommandArg ? selectCommandArg(cmdArg.nextCommandArg) : undefined
   };
+};
+
+/**
+ * Parse program Command and match values from passed in arguments.
+ * @param cmds Program commands configuration
+ * @param argv Command line arguments (excludes node and script path if from process.argv - pass process.argv.slice(2))
+ * @returns Tupple of ParsedActions and SelectedCommand which is only returned if specified in the arguments.
+ */
+const parseCommand = (cmds: Command[], argv: string[]): [ParsedActions, SelectedCommand?] => {
+  // retvals
+  let action: ParsedActions = ParsedActions.Success;
+  let cmd: Command | undefined = undefined;
+  let selCmd: SelectedCommand | undefined = undefined;
+
+  // validate
+  if (cmds.length < 1) {
+    throw new AppError(ErrorCodes.PARAM_INVALID, `command array is empty`);
+  }
+
+  if (argv.length < 1) {
+    // display usage of this program
+    return [ParsedActions.FullUsage, undefined];
+  }
+
+  // command must be the first item in the argv
+  // TODO: future support for subcommand
+  const requestedCmd: string = argv[0].toLowerCase();
+
+  cmd = cmds.find((val: Command, index: number) => {
+    return val.command.toLowerCase() === requestedCmd;
+  });
+
+  // remove command
+  argv = argv.slice(1);
+
+  if (!cmd) {
+    // display full usage
+    action = ParsedActions.MissingCommand;
+  } else if (!(cmd.args) || (cmd.args.length < 1)) {
+    // command with out switches
+    action = ParsedActions.Success;
+    selCmd = selectCommand(cmd);
+  } else if (argv.length === 0) {
+    // display command usage (since command expects swtiches but we have no more switches)
+    action = ParsedActions.MissingArg;
+    selCmd = selectCommand(cmd);
+  } else {
+    // convert argv into a Map
+    // expect -switch (or --switch) and followed by value as the next token
+    // if next token match switch pattern, then we just set the value to ''
+    const args = convertArgvtoMap(argv);
+
+    /**
+     * The next section matches each expected command args set with
+     * what was passed in.
+     *
+     * Important to remember that cmd (Command) object has args (CommandArg) array
+     * which is the start of set of switches. So, if there are 3 elements in the args
+     * array, that means there are 3 sets of switches for this comment.
+     *
+     * Each CommandArg set (starts as an element in args array) has a linked-list to next switches in the
+     * same set.
+     *
+     * cmd.args[0.0]=>[0.1]=>[0.2] means the first set has 3 different switches in it
+     * cmd.args[1.0]=>[1.1] means the second set has 2 different switches in it
+     */
+
+    const setCmdArgsCount = new WeakMap<CommandArg, number>();            // for each set, count total number of CommandArg
+    const setCmdArgsWithValueCount = new WeakMap<CommandArg, number>();   // for each set, count total number of CommandArg with value set (not empty string)
+
+    matchCommandArgs(cmd, args, setCmdArgsCount, setCmdArgsWithValueCount);
+
+    /**
+     * Convert Map of sets into Array so that we can sort it from small > large (ignoring count=0)
+     */
+    const cmdArgsWithCount: Array<{cmdArg: CommandArg, count: number;}> = new Array<{cmdArg: CommandArg, count: number;}>();
+
+    cmd.args.forEach((cmdArg: CommandArg) => {
+      let count = setCmdArgsCount.get(cmdArg)!;
+
+      if (count > 0) {
+        cmdArgsWithCount.push({cmdArg: cmdArg, count: count});
+      }
+    });
+
+    cmdArgsWithCount.sort((a: {cmdArg: CommandArg, count: number;}, b: {cmdArg: CommandArg, count: number;}): number => {
+      return a.count < b.count ? -1 : a.count > b.count ? 1 : 0;
+    });
+
+    /**
+     * Winner: Set with the smallest CommandArg count with all of the values set
+     */
+    const selectedCmdArg = cmdArgsWithCount.find((argWithCount: {cmdArg: CommandArg, count: number;}) => {
+      return (argWithCount.count === setCmdArgsWithValueCount.get(argWithCount.cmdArg));
+    });
+
+    if (selectedCmdArg) {
+      // we have a winner - convert Command and CommandArg
+      selCmd = selectCommand(cmd, selectedCmdArg.cmdArg);
+
+      // display usage for this command and for this commandargs
+      action = ParsedActions.Success;
+    } else {
+      // no winner - convert all the entire Command
+      selCmd = selectCommand(cmd);
+
+      // display usage of this Command
+      action = ParsedActions.MissingArg;;
+    }
+  }
+
+  return [action, selCmd];
 };
 
 /**
@@ -651,104 +766,31 @@ export class CommandArgImpl implements CommandArg {
 export default function parseCommandArguments(cmds: Command[], argv: string[]): [ParsedActions, SelectedCommand?] {
   // retvals
   let action: ParsedActions = ParsedActions.Success;
-  let cmd: Command | undefined;
-  let selCmd: SelectedCommand | undefined;
+  let selCmd: SelectedCommand | undefined = undefined;
 
-  // validate
-  if (cmds.length < 1) {
-    throw new AppError(ErrorCodes.PARAM_INVALID, `command array is empty`);
-  }
+  // deal with built-in commands first
+  if (argv.length > 0) {
+    const cmd = argv[0].toLowerCase();
 
-  if (argv.length < 1) {
-    // display usage of this program
-    return [ParsedActions.FullUsage, undefined];
-  }
-
-  // command must be the first item in the argv
-  // TODO: future support for subcommand
-  const requestedCmd: string = argv[0].toLowerCase();
-
-  cmd = cmds.find((val: Command, index: number) => {
-    return val.command.toLowerCase() === requestedCmd;
-  });
-
-  // remove command
-  argv = argv.slice(1);
-
-  if (!cmd) {
-    // display full usage
-    action = ParsedActions.MissingCommand;
-  } else if (!(cmd.args) || (cmd.args.length < 1)) {
-    // command with out switches
-    action = ParsedActions.Success;
-    selCmd = selectCommand(cmd);
-  } else if (argv.length === 0) {
-    // display command usage (since command expects swtiches but we have no more switches)
-    action = ParsedActions.MissingArg;
-    selCmd = selectCommand(cmd);
-  } else {
-    // convert argv into a Map
-    // expect -switch (or --switch) and followed by value as the next token
-    // if next token match switch pattern, then we just set the value to ''
-    const args = convertArgvtoMap(argv);
-
-    /**
-     * The next section matches each expected command args set with
-     * what was passed in.
-     *
-     * Important to remember that cmd (Command) object has args (CommandArg) array
-     * which is the start of set of switches. So, if there are 3 elements in the args
-     * array, that means there are 3 sets of switches for this comment.
-     *
-     * Each CommandArg set (starts as an element in args array) has a linked-list to next switches in the
-     * same set.
-     *
-     * cmd.args[0.0]=>[0.1]=>[0.2] means the first set has 3 different switches in it
-     * cmd.args[1.0]=>[1.1] means the second set has 2 different switches in it
-     */
-
-    const setCmdArgsCount = new WeakMap<CommandArg, number>();            // for each set, count total number of CommandArg
-    const setCmdArgsWithValueCount = new WeakMap<CommandArg, number>();   // for each set, count total number of CommandArg with value set (not empty string)
-
-    matchCommandArgs(cmd, args, setCmdArgsCount, setCmdArgsWithValueCount);
-
-    /**
-     * Convert Map of sets into Array so that we can sort it from small > large (ignoring count=0)
-     */
-    const cmdArgsWithCount: Array<{cmdArg: CommandArg, count: number;}> = new Array<{cmdArg: CommandArg, count: number;}>();
-
-    cmd.args.forEach((cmdArg: CommandArg) => {
-      let count = setCmdArgsCount.get(cmdArg)!;
-
-      if (count > 0) {
-        cmdArgsWithCount.push({cmdArg: cmdArg, count: count});
-      }
-    });
-
-    cmdArgsWithCount.sort((a: {cmdArg: CommandArg, count: number;}, b: {cmdArg: CommandArg, count: number;}): number => {
-      return a.count < b.count ? -1 : a.count > b.count ? 1 : 0;
-    });
-
-    /**
-     * Winner: Set with the smallest CommandArg count with all of the values set
-     */
-    const selectedCmdArg = cmdArgsWithCount.find((argWithCount: {cmdArg: CommandArg, count: number;}) => {
-      return (argWithCount.count === setCmdArgsWithValueCount.get(argWithCount.cmdArg));
-    });
-
-    if (selectedCmdArg) {
-      // we have a winner - convert Command and CommandArg
-      selCmd = selectCommand(cmd, selectedCmdArg.cmdArg);
-
-      // display usage for this command and for this commandargs
-      action = ParsedActions.Success;
-    } else {
-      // no winner - convert all the entire Command
-      selCmd = selectCommand(cmd);
-
-      // display usage of this Command
-      action = ParsedActions.MissingArg;;
+    if (cmd === 'help') {
+      action = ParsedActions.Help;
+      argv = argv.slice(1);
+    } else if (cmd === 'version') {
+      action = ParsedActions.Version;
+      argv = argv.slice(1);
     }
+  }
+
+  // for non-builtin commands or for help, we'll continue parsing
+  if ((action === ParsedActions.Success) || (action === ParsedActions.Help)) {
+    const [cmdAction, cmdSelected] = parseCommand(cmds, argv);
+
+    // overwrite action if not help
+    if (action !== ParsedActions.Help) {
+      action = cmdAction;
+    }
+
+    selCmd = cmdSelected;
   }
 
   return [action, selCmd];
