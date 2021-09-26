@@ -58,6 +58,7 @@
 //   description: 'Calculate CIDR',
 //   args: [
 //     {
+//       name: 'cidr',
 //       switches: ['-c', '--cidr'],
 //       description: 'CIDR notation',
 //       valuePatternText: 'N.N.N.N/CB',
@@ -66,12 +67,14 @@
 //       nextCommandArg: undefined
 //     },
 //     {
+//       name: 'ip',
 //       switches: ['-i', '--ipv4'],
 //       description: 'IPv4',
 //       valuePatternText: 'N.N.N.N',
 //       valuePatternRegEx: /.*/,
 //       value: '',
 //       nextCommandArg: {
+//         name: 'cb',
 //         switches: ['-cb', '--cidr-block'],
 //         description: 'CIDR block',
 //         valuePatternText: 'CB',
@@ -116,7 +119,7 @@ export interface Command {
   readonly description: string;
   readonly args?: CommandArg[];
   addArgument(opts: CommandArgsOptions): CommandArg;
-  addArgument(switches: string[], desc: string, valuePatternText: string, valuePatternRegEx: RegExp, defaultVal?: string): CommandArg;
+  addArgument(name: string, switches: string[], desc: string, valuePatternText: string, valuePatternRegEx: RegExp, defaultVal?: string): CommandArg;
 }
 
 /**
@@ -132,6 +135,7 @@ export interface SelectedCommand {
  * Command argument definition
  */
 export interface CommandArg {
+  readonly name: string;
   readonly switches: Readonly<string[]>;
   readonly description: string;
   readonly valuePatternText: string;
@@ -139,7 +143,7 @@ export interface CommandArg {
   readonly value: string;
   readonly nextCommandArg?: CommandArg;
   addArgument(opts: CommandArgsOptions): CommandArg;
-  addArgument(switches: string[], desc: string, valuePatternText: string, valuePatternRegEx: RegExp, defaultVal?: string): CommandArg;
+  addArgument(name: string, switches: string[], desc: string, valuePatternText: string, valuePatternRegEx: RegExp, defaultVal?: string): CommandArg;
   setValue: (val: string) => boolean;
 }
 
@@ -147,6 +151,7 @@ export interface CommandArg {
  * Selected CommandArg definition
  */
 export interface SelectedCommandArg {
+  readonly name: string;
   readonly switches: Readonly<string[]>;
   readonly description: string;
   readonly valuePatternText: string;
@@ -159,6 +164,7 @@ export interface SelectedCommandArg {
  * Command line argument options definition
  */
 export interface CommandArgsOptions {
+  name: string;
   switches: string[];
   desc: string;
   valuePatternText: string;
@@ -327,6 +333,7 @@ const selectCommandArgs = (cmdArgs: CommandArg[] | undefined): SelectedCommandAr
  */
 const selectCommandArg = (cmdArg: CommandArg): SelectedCommandArg => {
   return {
+    name: cmdArg.name,
     switches: cmdArg.switches,
     description: cmdArg.description,
     valuePatternText: cmdArg.valuePatternText,
@@ -388,34 +395,36 @@ export class CommandImpl implements Command {
 
   /**
    * Add next argument
-   * @param opts Command args options
+   * @param opts CommandArg options object
    */
   addArgument(opts: CommandArgsOptions): CommandArg;
 
   /**
    * Add next argument
+   * @param name Name/ID of this command argument
    * @param switches Switches for this argument
    * @param desc Description for this argument
    * @param valuePatternText Value pattern in text
    * @param valuePatternRegEx Value pattern in RegEx
    * @param defaultVal Default value if specified
    */
-  addArgument(switches: string[], desc: string, valuePatternText: string, valuePatternRegEx: RegExp, defaultVal?: string): CommandArg;
+  addArgument(name: string, switches: string[], desc: string, valuePatternText: string, valuePatternRegEx: RegExp, defaultVal: string): CommandArg;
 
   /**
    * Add next argument
-   * @param firstArgs Switches for this argument or options object
+   * @param firstArgs Either CommandArg options object or name/id of the CommandArg
+   * @param switches Switches for this argument
    * @param desc Description for this argument
    * @param valuePatternText Value pattern in text
    * @param valuePatternRegEx Value pattern in RegEx
    * @param defaultVal Default value if specified
    * @returns CommandArg object for chaining
    */
-  public addArgument(firstArgs: string[] | CommandArgsOptions, desc?: string, valuePatternText?: string, valuePatternRegEx?: RegExp, defaultVal?: string): CommandArg {
+  public addArgument(firstArgs: string | CommandArgsOptions, switches?: string[], desc?: string, valuePatternText?: string, valuePatternRegEx?: RegExp, defaultVal?: string): CommandArg {
     let newArg: CommandArg;
 
-    if (Array.isArray(firstArgs)) {
-      newArg = new CommandArgImpl(firstArgs, desc || '', valuePatternText || '', valuePatternRegEx || /.*/gi, defaultVal);
+    if (typeof (firstArgs) === 'string') {
+      newArg = new CommandArgImpl(firstArgs as string, switches || [], desc || '', valuePatternText || '', valuePatternRegEx || /.*/gi, defaultVal);
     } else {
       newArg = new CommandArgImpl(firstArgs);
     }
@@ -432,6 +441,7 @@ export class CommandImpl implements Command {
  */
 export class CommandArgImpl implements CommandArg {
   // class vars
+  private _name: string = '';
   private _switches: string[] = [];
   private _desc: string = '';
   private _textPattern: string = '';
@@ -441,39 +451,43 @@ export class CommandArgImpl implements CommandArg {
 
   /**
    * Creates new command argument
-   * @param args Command args options
+   * @param args CommandArg options object
    */
   constructor(args: CommandArgsOptions);
 
   /**
    * Creates new command argument
+   * @param name Name/ID of this command argument
    * @param switches Switches for this argument
    * @param desc Description for this argument
    * @param valuePatternText Value pattern in text
    * @param valuePatternRegEx Value pattern in RegEx
    * @param defaultVal Default value if specified
    */
-  constructor(switches: string[], desc: string, valuePatternText: string, valuePatternRegEx: RegExp, defaultVal?: string);
+  constructor(name: string, switches: string[], desc: string, valuePatternText: string, valuePatternRegEx: RegExp, defaultVal?: string);
 
   /**
    * Creates new command argument
-   * @param firstArgs Either a CommandArgsOptions or string[]
+   * @param firstArgs Either CommandArg options object or name/id of the CommandArg
+   * @param switches Switches for this argument
    * @param desc Description for this argument
    * @param valuePatternText Value pattern in text
    * @param valuePatternRegEx Value pattern in RegEx
    * @param defaultVal Default value if specified
    */
-  constructor(firstArgs: string[] | CommandArgsOptions, desc?: string, valuePatternText?: string, valuePatternRegEx?: RegExp, defaultVal?: string) {
+  constructor(firstArgs: string | CommandArgsOptions, switches?: string[], desc?: string, valuePatternText?: string, valuePatternRegEx?: RegExp, defaultVal?: string) {
     // check if first arg is array
-    let argSwitches: string[], argDesc: string, argPatternText: string, argPatternRegEx: RegExp, argDefVal: string;
+    let argName: string, argSwitches: string[], argDesc: string, argPatternText: string, argPatternRegEx: RegExp, argDefVal: string;
 
-    if (Array.isArray(firstArgs)) {
-      argSwitches = firstArgs as string[];
+    if (typeof (firstArgs) === 'string') {
+      argName = firstArgs as string;
+      argSwitches = switches || [];
       argDesc = desc || '';
       argPatternText = valuePatternText || '';
       argPatternRegEx = valuePatternRegEx || /.*/gi;
       argDefVal = defaultVal || '';
     } else {
+      argName = firstArgs.name;
       argSwitches = firstArgs.switches;
       argDesc = firstArgs.desc;
       argPatternText = firstArgs.valuePatternText;
@@ -512,11 +526,19 @@ export class CommandArgImpl implements CommandArg {
       return switches.indexOf(val) === index;
     });
 
+    this._name = argName;
     this._switches = argSwitches;
     this._desc = argDesc;
     this._textPattern = argPatternText;
     this._regExPattern = argPatternRegEx;
     this._value = argDefVal;
+  }
+
+  /**
+   * Gets name of this command argument
+   */
+  public get name(): string {
+    return this._name;
   }
 
   /**
@@ -563,34 +585,36 @@ export class CommandArgImpl implements CommandArg {
 
   /**
    * Add next argument
-   * @param opts Command args options
+   * @param opts CommandArg options object
    */
   addArgument(opts: CommandArgsOptions): CommandArg;
 
   /**
    * Add next argument
+   * @param name Name/ID of this command argument
    * @param switches Switches for this argument
    * @param desc Description for this argument
    * @param valuePatternText Value pattern in text
    * @param valuePatternRegEx Value pattern in RegEx
    * @param defaultVal Default value if specified
    */
-  addArgument(switches: string[], desc: string, valuePatternText: string, valuePatternRegEx: RegExp, defaultVal?: string) : CommandArg;
+  addArgument(name: string, switches: string[], desc: string, valuePatternText: string, valuePatternRegEx: RegExp, defaultVal?: string) : CommandArg;
 
   /**
    * Add next argument
-   * @param firstArgs Switches for this argument or options object
+   * @param firstArgs Either CommandArg options object or name/id of the CommandArg
+   * @param switches Switches for this argument
    * @param desc Description for this argument
    * @param valuePatternText Value pattern in text
    * @param valuePatternRegEx Value pattern in RegEx
    * @param defaultVal Default value if specified
    * @returns CommandArg object for chaining
    */
-  public addArgument(firstArgs: string[] | CommandArgsOptions, desc?: string, valuePatternText?: string, valuePatternRegEx?: RegExp, defaultVal?: string): CommandArg {
+  public addArgument(firstArgs: string | CommandArgsOptions, switches?: string[], desc?: string, valuePatternText?: string, valuePatternRegEx?: RegExp, defaultVal?: string): CommandArg {
     let newArg: CommandArg;
 
-    if (Array.isArray(firstArgs)) {
-      newArg = new CommandArgImpl(firstArgs, desc || '', valuePatternText || '', valuePatternRegEx || /.*/gi, defaultVal);
+    if (typeof (firstArgs) === 'string') {
+      newArg = new CommandArgImpl(firstArgs as string, switches || [], desc || '', valuePatternText || '', valuePatternRegEx || /.*/gi, defaultVal);
     } else {
       newArg = new CommandArgImpl(firstArgs);
     }
