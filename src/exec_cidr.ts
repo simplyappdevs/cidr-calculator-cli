@@ -29,6 +29,14 @@ export function getCIDRCommandLineArgs(): Command {
 };
 
 /**
+ * Returns the CIDR command and description.
+ * @returns Returns tupple of command and description
+ */
+export function getUsageCommand(): [string, string] {
+  return ['cidr', 'CIDR information given a full CIDR notation or combination of IPv4 and CIDR block']
+};
+
+/**
  * Execute CIDR command
  * @param cmd Command to execute
  */
