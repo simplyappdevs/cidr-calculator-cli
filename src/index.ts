@@ -7,11 +7,15 @@
  */
 import {default as parseCommandArguments, Command, CommandImpl, ParsedActions} from './command';
 import {default as execCIDR, getCIDRCommandLineArgs} from './exec_cidr';
+import {usage} from './usage';
 
 /**
  * SimplyAppDevs Imports
  */
-import {CIDRModule} from '@simplyappdevs/cidr-calculator';
+import {logger} from '@simplyappdevs/logging-helper';
+
+// initialize logger
+logger.init('CIDRAPP');
 
 /**
  * Returns Command configuration
@@ -42,7 +46,7 @@ export default async function execCLI(argv: string[]): Promise<number> {
 
     switch (action) {
       case ParsedActions.FullUsage:
-        console.log('Show full usage');
+        usage();
         break;
 
       case ParsedActions.Usage:
