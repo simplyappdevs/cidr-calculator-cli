@@ -106,6 +106,18 @@ export function usageVersion() {
 };
 
 /**
+ * Prints help
+ * @param cmd Command to show help for
+ */
+export function usageHelp(cmd?: string): void {
+  if (cmd) {
+    console.log(`Help on ${cmd}`);
+  } else {
+    usage();
+  }
+};
+
+/**
  * Print missing command
  * @param passedIn Command that was passed in
  */

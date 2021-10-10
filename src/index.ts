@@ -7,7 +7,7 @@
  */
 import {default as parseCommandArguments, Command, CommandImpl, ParsedActions} from './command';
 import {default as execCIDR, getCIDRCommandLineArgs} from './exec_cidr';
-import {usage, usageMissingCommand, usageVersion} from './usage';
+import {usage, usageHelp, usageMissingCommand, usageVersion} from './usage';
 
 /**
  * SimplyAppDevs Imports
@@ -50,11 +50,11 @@ export default async function execCLI(argv: string[]): Promise<number> {
         break;
 
       case ParsedActions.Usage:
-        console.log('Show command usage');
+        usage();
         break;
 
       case ParsedActions.Help:
-        console.log('Show help');
+        usageHelp(selCmd ? selCmd.command : '');
         break;
 
       case ParsedActions.Version:
