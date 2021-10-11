@@ -5,7 +5,7 @@
   "type": "commonjs",
   "main": "./dist/cli.js",
   "bin": {
-    "cidr": "./dist/cli.js"
+    "cidrcli": "./dist/cli.js"
   },
   "scripts": {
     "tsc": "tsc",

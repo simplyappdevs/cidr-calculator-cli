@@ -5,6 +5,7 @@
 /**
  * App Imports
  */
+import {AppConstants} from './constants';
 import {Command, CommandImpl, SelectedCommand} from './command';
 import {default as OutputModule} from './output';
 import {default as AppError, ErrorCodes} from './error';
@@ -19,11 +20,17 @@ import {CIDR, CIDRModule} from '@simplyappdevs/cidr-calculator';
  */
 const MODCMD = new CommandImpl('info', 'CIDR information given a full CIDR notation or combination of IPv4 and CIDR block');
 
-MODCMD.addArgument('cidr', ['-c', '--cidr'], 'CIDR notation', 'N.N.N.N/CB', /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/[0-9]{1,2}$/, '');
+/**
+ * Initialize command arguments
+ */
+function initCommandArgs() {
+  MODCMD.addArgument('cidr', ['-c', '--cidr'], 'CIDR notation', '<N.N.N.N>/<1-32>', /^(([0-9]|[1-9][0-9]|[1][0-9][0-9]|[2][0-5][0-5])\.){3}([0-9]|[1-9][0-9]|[1][0-9][0-9]|[2][0-5][0-5])\/([1-9]|[1-2][0-9]|[3][0-2])$/, '');
 
-MODCMD.addArgument('ip', ['-i', '--ipv4'], 'IPv4 address', 'N.N.N.N', /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/, '')
-  .addArgument('cb', ['-cb', '--cidr-block'], 'CIDR block', 'CB', /^[0-9]{1,2}$/, '');
+  MODCMD.addArgument('ip', ['-i', '--ipv4'], 'IPv4 address (N is a number between 0 - 255)', '<N.N.N.N>', /^(([0-9]|[1-9][0-9]|[1][0-9][0-9]|[2][0-5][0-5])\.){3}([0-9]|[1-9][0-9]|[1][0-9][0-9]|[2][0-5][0-5])$/, '')
+    .addArgument('cb', ['-cb', '--cidr-block'], 'CIDR block (number between 1 and 32)', '<1-32>', /^([1-9]|[1-2][0-9]|[3][0-2])$/, '');
+}
 
+initCommandArgs();
 
 /**
  * Returns command line configuration for CIDR related action
@@ -31,23 +38,6 @@ MODCMD.addArgument('ip', ['-i', '--ipv4'], 'IPv4 address', 'N.N.N.N', /^(\d{1,3}
 export function getInfoCommandLineArgs(): Command {
   return MODCMD;
 };
-
-/**
- * Returns the CIDR command and description.
- * @returns Returns tupple of command and description
- */
-export function getUsageCommand(): [string, string] {
-  return [MODCMD.command, MODCMD.description]
-};
-
-/**
- * Prints help for cidr command
- * @param prefix Prefix for each new line
- */
-export function getHelpCommand(prefix: string): string {
-  return `
-  `;
-}
 
 /**
  * Execute CIDR command
