@@ -15,17 +15,21 @@ import {default as AppError, ErrorCodes} from './error';
 import {CIDR, CIDRModule} from '@simplyappdevs/cidr-calculator';
 
 /**
+ * Module initializations
+ */
+const MODCMD = new CommandImpl('info', 'CIDR information given a full CIDR notation or combination of IPv4 and CIDR block');
+
+MODCMD.addArgument('cidr', ['-c', '--cidr'], 'CIDR notation', 'N.N.N.N/CB', /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/[0-9]{1,2}$/, '');
+
+MODCMD.addArgument('ip', ['-i', '--ipv4'], 'IPv4 address', 'N.N.N.N', /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/, '')
+  .addArgument('cb', ['-cb', '--cidr-block'], 'CIDR block', 'CB', /^[0-9]{1,2}$/, '');
+
+
+/**
  * Returns command line configuration for CIDR related action
  */
-export function getCIDRCommandLineArgs(): Command {
-  const cmd = new CommandImpl('cidr', 'Get CIDR information');
-
-  cmd.addArgument('cidr', ['-c', '--cidr'], 'CIDR notation', 'N.N.N.N/CB', /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/[0-9]{1,2}$/, '');
-
-  cmd.addArgument('ip', ['-i', '--ipv4'], 'IPv4 address', 'N.N.N.N', /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/, '')
-    .addArgument('cb', ['-cb', '--cidr-block'], 'CIDR block', 'CB', /^[0-9]{1,2}$/, '');
-
-  return cmd;
+export function getInfoCommandLineArgs(): Command {
+  return MODCMD;
 };
 
 /**
@@ -33,17 +37,26 @@ export function getCIDRCommandLineArgs(): Command {
  * @returns Returns tupple of command and description
  */
 export function getUsageCommand(): [string, string] {
-  return ['cidr', 'CIDR information given a full CIDR notation or combination of IPv4 and CIDR block']
+  return [MODCMD.command, MODCMD.description]
 };
+
+/**
+ * Prints help for cidr command
+ * @param prefix Prefix for each new line
+ */
+export function getHelpCommand(prefix: string): string {
+  return `
+  `;
+}
 
 /**
  * Execute CIDR command
  * @param cmd Command to execute
  */
-export default function execCIDR(cmd: SelectedCommand): void {
+export default function execInfo(cmd: SelectedCommand): void {
   try {
     // validate
-    if (cmd.command !== 'cidr') {
+    if (cmd.command !== MODCMD.command) {
       throw new AppError(ErrorCodes.PARAM_INVALID, 'command is not for executing cidr');
     }
 

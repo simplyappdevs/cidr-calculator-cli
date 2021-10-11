@@ -9,7 +9,7 @@
  * App Imports
  */
 const pkg = require('../package.json');   // leaving this as require() to indicate it is not a module
-import {getUsageCommand as cidrGetUsageCommand} from './exec_cidr';
+import {getUsageCommand as infoGetUsageCommand} from './exec_info';
 
 /**
  * SimplAppDevs Imports
@@ -67,8 +67,8 @@ const getCommandsUsage = (): void => {
   try {
     // get all commands
     cmdsUsage.cmdUsages.push(['version', 'Display version']);
-    cmdsUsage.cmdUsages.push(['help <command>', 'Display help for a command']);
-    cmdsUsage.cmdUsages.push(cidrGetUsageCommand());
+    cmdsUsage.cmdUsages.push(['help <command>', 'Display help for a command (displays full usage if command is omitted)']);
+    cmdsUsage.cmdUsages.push(infoGetUsageCommand());
 
     // figure out the longest command
     cmdsUsage.maxCmdLen = cmdsUsage.cmdUsages.map((cmdUsage: [string, string]): number => {

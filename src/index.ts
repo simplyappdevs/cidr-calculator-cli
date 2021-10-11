@@ -5,8 +5,8 @@
 /**
  * App Imports
  */
-import {default as parseCommandArguments, Command, CommandImpl, ParsedActions} from './command';
-import {default as execCIDR, getCIDRCommandLineArgs} from './exec_cidr';
+import {default as parseCommandArguments, Command, ParsedActions, SelectedCommand} from './command';
+import {default as execInfo, getInfoCommandLineArgs} from './exec_info';
 import {usage, usageHelp, usageMissingCommand, usageVersion} from './usage';
 
 /**
@@ -14,8 +14,12 @@ import {usage, usageHelp, usageMissingCommand, usageVersion} from './usage';
  */
 import {logger} from '@simplyappdevs/logging-helper';
 
-// initialize logger
+/**
+ * Module Initializations
+ */
 logger.init('CIDRAPP');
+
+const CMDS = new Map<string, (selCmd: SelectedCommand)=> void>()
 
 /**
  * Returns Command configuration
@@ -23,8 +27,12 @@ logger.init('CIDRAPP');
  */
 const configCommandArgs = (): Command[] => {
   const cmds: Command[] = [];
+  let cmd: Command;
 
-  cmds.push(getCIDRCommandLineArgs());
+  // INFO
+  cmd = getInfoCommandLineArgs();
+  CMDS.set(cmd.command, execInfo);
+  cmds.push(getInfoCommandLineArgs());
 
   return cmds;
 };
@@ -45,10 +53,6 @@ export default async function execCLI(argv: string[]): Promise<number> {
     const [action, selCmd] = parseCommandArguments(cmds, argv);
 
     switch (action) {
-      case ParsedActions.FullUsage:
-        usage();
-        break;
-
       case ParsedActions.Usage:
         usage();
         break;
@@ -69,13 +73,9 @@ export default async function execCLI(argv: string[]): Promise<number> {
         console.log('Missing argument');
         break;
 
-      case ParsedActions.Success:
-        switch (selCmd?.command) {
-          case 'cidr':
-            execCIDR(selCmd);
-            break;
-        }
-
+      case ParsedActions.ExecCommand:
+        // the exec function is in the map and this should be valid all the time
+        CMDS.get(selCmd!.command)!(selCmd!);
         break;
     }
   } catch (e) {

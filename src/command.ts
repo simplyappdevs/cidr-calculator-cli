@@ -105,13 +105,12 @@ const cmdTest: RegExp = /^[a-zA-Z0-9]{1,}$/;
  * Action needed after parsing arguments
  */
 export enum ParsedActions {
-  Success = 0,
+  ExecCommand = 0,
   MissingCommand = 1,
   MissingArg = 2,
   Help = 3,
   Usage = 4,
-  FullUsage = 5,
-  Version = 6
+  Version = 5
 }
 
 /**
@@ -354,7 +353,7 @@ const selectCommandArg = (cmdArg: CommandArg): SelectedCommandArg => {
  */
 const parseCommand = (cmds: Command[], argv: string[]): [ParsedActions, SelectedCommand?] => {
   // retvals
-  let action: ParsedActions = ParsedActions.Success;
+  let action: ParsedActions = ParsedActions.ExecCommand;
   let cmd: Command | undefined = undefined;
   let selCmd: SelectedCommand | undefined = undefined;
 
@@ -365,7 +364,7 @@ const parseCommand = (cmds: Command[], argv: string[]): [ParsedActions, Selected
 
   if (argv.length < 1) {
     // display usage of this program
-    return [ParsedActions.FullUsage, undefined];
+    return [ParsedActions.Usage, undefined];
   }
 
   // command must be the first item in the argv
@@ -384,7 +383,7 @@ const parseCommand = (cmds: Command[], argv: string[]): [ParsedActions, Selected
     action = ParsedActions.MissingCommand;
   } else if (!(cmd.args) || (cmd.args.length < 1)) {
     // command with out switches
-    action = ParsedActions.Success;
+    action = ParsedActions.ExecCommand;
     selCmd = selectCommand(cmd);
   } else if (argv.length === 0) {
     // display command usage (since command expects swtiches but we have no more switches)
@@ -445,7 +444,7 @@ const parseCommand = (cmds: Command[], argv: string[]): [ParsedActions, Selected
       selCmd = selectCommand(cmd, selectedCmdArg.cmdArg);
 
       // display usage for this command and for this commandargs
-      action = ParsedActions.Success;
+      action = ParsedActions.ExecCommand;
     } else {
       // no winner - convert all the entire Command
       selCmd = selectCommand(cmd);
@@ -765,7 +764,7 @@ export class CommandArgImpl implements CommandArg {
  */
 export default function parseCommandArguments(cmds: Command[], argv: string[]): [ParsedActions, SelectedCommand?] {
   // retvals
-  let action: ParsedActions = ParsedActions.Success;
+  let action: ParsedActions = ParsedActions.ExecCommand;
   let selCmd: SelectedCommand | undefined = undefined;
 
   // deal with built-in commands first
@@ -782,7 +781,7 @@ export default function parseCommandArguments(cmds: Command[], argv: string[]): 
   }
 
   // for non-builtin commands or for help, we'll continue parsing
-  if ((action === ParsedActions.Success) || (action === ParsedActions.Help)) {
+  if ((action === ParsedActions.ExecCommand) || (action === ParsedActions.Help)) {
     const [cmdAction, cmdSelected] = parseCommand(cmds, argv);
 
     // overwrite action if not help
