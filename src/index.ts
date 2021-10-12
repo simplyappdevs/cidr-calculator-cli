@@ -7,7 +7,7 @@
  */
 import {default as parseCommandArguments, Command, ParsedActions, SelectedCommand} from './command';
 import {default as execInfo, getInfoCommandLineArgs} from './exec_info';
-import {usage, usageHelp, usageMissingCommand, usageVersion} from './usage';
+import {usage, usageHelp, usageMissingArguments, usageMissingCommand, usageVersion} from './usage';
 
 /**
  * SimplyAppDevs Imports
@@ -58,19 +58,26 @@ export default async function execCLI(argv: string[]): Promise<number> {
         break;
 
       case ParsedActions.Help:
+        // display help - selCmd will be undefined if the argument after "help"
+        // does not match any of the Commands - we pass '' in that case
         usageHelp(selCmd ? selCmd.command : '');
         break;
 
       case ParsedActions.Version:
+        // display version
         usageVersion();
         break;
 
       case ParsedActions.MissingCommand:
+        // selCmd is undefined as no match was found
+        // so assume the first element was the invalid command
         usageMissingCommand(argv.length > 0 ? argv[0] : '');
         break;
 
       case ParsedActions.MissingArg:
-        console.log('Missing argument');
+        // missing arguments means a command matched but
+        // some expected arguments are not set to non-empty value
+        usageMissingArguments(selCmd!);
         break;
 
       case ParsedActions.ExecCommand:

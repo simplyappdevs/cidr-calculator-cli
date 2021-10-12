@@ -9,8 +9,9 @@
  * App Imports
  */
 const pkg = require('../package.json');   // leaving this as require() to indicate it is not a module
+
 import {AppConstants} from './constants';
-import {Command, CommandArg} from './command';
+import {Command, CommandArg, SelectedCommand, SelectedCommandArg} from './command';
 import {getInfoCommandLineArgs} from './exec_info';
 
 /**
@@ -19,25 +20,14 @@ import {getInfoCommandLineArgs} from './exec_info';
 import {logger} from '@simplyappdevs/logging-helper';
 
 /**
- * CommandsUsage definition
- */
-interface CommandsUsage {
-  maxCmdLen: number;
-  cmdUsages: Array<[string, string]>;
-}
-
-/**
  * Module vars
  */
-let appVersion: string = 'N/A';
-let maxSwitchesLen: number = 0;
+let appVersion: string = 'N/A';   // app/cli version from package.json
+let maxCommandLen: number = 0;    // max length between all Command
+let maxSwitchesLen: number = 0;   // max length between all switches in CommandArgs
 
-const depAppsVersion: Map<string, string> = new Map();
-const cmdsUsage: CommandsUsage = {
-  maxCmdLen: 0,
-  cmdUsages: []
-};
-const cmds: Map<string, Command> = new Map();
+const DEPSVERSION: Map<string, string> = new Map();    // deps version from package.json
+const ALLCOMMANDS: Map<string, Command> = new Map();   // all commands
 
 // initialize
 const modLogger = logger.createModuleLogger('USAGE');
@@ -53,7 +43,7 @@ const getAppInformation = (): void => {
     // app dependencies
     if (pkg.dependencies) {
       Object.keys(pkg.dependencies).forEach((key: string) => {
-        depAppsVersion.set(key, pkg.dependencies[key]);
+        DEPSVERSION.set(key, pkg.dependencies[key]);
       });
     }
   } catch (err) {
@@ -72,30 +62,38 @@ const getCommandsUsage = (): void => {
   try {
     let cmd: Command;
 
-    // get all commands
-    cmdsUsage.cmdUsages.push(['version', 'Display version']);
-    cmdsUsage.cmdUsages.push(['help <command>', 'Display help for a command (displays full usage if command is omitted)']);
+    /**
+     * Workaround for now to "hardcode" version and help commands
+     */
+    cmd = {
+      command: 'version',
+      description: 'Display version',
+      addArgument: (): CommandArg => {return {} as CommandArg}
+    };
+    ALLCOMMANDS.set(cmd.command, cmd);
+
+    cmd = {
+      command: 'help <command>',
+      description: 'Display help for a command (displays full usage if command is omitted)',
+      addArgument: (): CommandArg => {return {} as CommandArg;}
+    };
+    ALLCOMMANDS.set(cmd.command, cmd);
 
     // info
     cmd = getInfoCommandLineArgs();
-    cmds.set(cmd.command, cmd);
-    cmdsUsage.cmdUsages.push([cmd.command, cmd.description]);
+    ALLCOMMANDS.set(cmd.command, cmd);
 
     // figure out the longest command
-    cmdsUsage.maxCmdLen = cmdsUsage.cmdUsages.map((cmdUsage: [string, string]): number => {
-      return cmdUsage[0].length;
-    }).reduce((prevVal: number, curVal: number) => {
-      if (curVal > prevVal) {
-        return curVal;
-      } else {
-        return prevVal;
+    ALLCOMMANDS.forEach((cmd: Command) => {
+      if (cmd.command.length > maxCommandLen) {
+        maxCommandLen = cmd.command.length;
       }
-    }, 0);
+    });
 
     // figure out the longest switch
     let tmpCmdArg: CommandArg | undefined;
 
-    cmds.forEach((cmd: Command) => {
+    ALLCOMMANDS.forEach((cmd: Command) => {
       // only act with cmd that has args
       if (cmd.args) {
         cmd.args.forEach((cmdArg: CommandArg) => {
@@ -133,10 +131,10 @@ function usageHeader(): void {
 }
 
 /**
- * Returns command line arguments to show how to use the command
- * @param cmdArg Starting point of the command argument to print usage for
+ * Returns usage for switches in CommandArg or SelectedCommandArg (recurse through linked-list)
+ * @param cmdArg CommandArg or SelectedCommandArg
  */
-function usageCommandBuildSwitches(cmdArg: CommandArg): string {
+function usageCommandBuildSwitchesUsage(cmdArg: CommandArg | SelectedCommandArg): string {
   let usage: string = '';
 
   usage = cmdArg.switches.reduce((acc: string, sw: string): string => {
@@ -146,41 +144,42 @@ function usageCommandBuildSwitches(cmdArg: CommandArg): string {
   usage += ` ${cmdArg.valuePatternText}`;
 
   if (cmdArg.nextCommandArg) {
-    return `${usage} ${usageCommandBuildSwitches(cmdArg.nextCommandArg)}`;
+    // recurse to the next CommandArg
+    return `${usage} ${usageCommandBuildSwitchesUsage(cmdArg.nextCommandArg)}`;
   } else {
     return usage;
   }
 }
 
 /**
- * Prints Command usage
- * @param cmd Command object to print usage for
- * @param cmdArgs Starting point of the command argument to print usage for
+ * Prints Command or SelectedCommand usage
+ * @param cmd Command or SelectedCommand object to print usage
+ * @param cmdArgs CommandArg or SelectedCommandArg
  */
-function usageCommand(cmd: Command, cmdArgs?: CommandArg): void {
+function usageCommand(cmd: Command | SelectedCommand, cmdArgs?: CommandArg | SelectedCommandArg): void {
   // prints command header
   console.log('');
 
   if (cmdArgs) {
-    console.log(`  ${AppConstants.SCRIPTNAME} ${cmd.command} ${usageCommandBuildSwitches(cmdArgs)}`);
+    console.log(`    ${AppConstants.SCRIPTNAME} \x1b[34m${cmd.command}\x1b[0m ${usageCommandBuildSwitchesUsage(cmdArgs)}`);
   } else {
-    console.log(`  ${AppConstants.SCRIPTNAME} ${cmd.command}`);
+    console.log(`    ${AppConstants.SCRIPTNAME} \x1b[34m${cmd.command}\x1b[0m`);
   }
 }
 
 /**
- * Prints switches for CommandArg
- * @param cmdArg CommandArg to print switches for
+ * Prints CommandArg or SelectedCommandArg usage
+ * @param cmdArg CommandArg or SelectedCommandArg
  */
-function usageCommandArgs(cmdArg: CommandArg): void {
+function usageCommandArgs(cmdArg: CommandArg | SelectedCommandArg): void {
   console.log('');
 
   cmdArg.switches.forEach((sw: string, index: number) => {
     if (index === 0) {
       // always show the first switch and description on the same line
-      console.log(`    ${sw.padEnd(maxSwitchesLen, ' ')} : ${cmdArg.description}`);
+      console.log(`      ${sw.padEnd(maxSwitchesLen, ' ')} : ${cmdArg.description}`);
     } else {
-      console.log(`    ${sw}`);
+      console.log(`      ${sw}`);
     }
   });
 
@@ -204,7 +203,7 @@ export function usageVersion() {
 export function usageHelp(cmd?: string): void {
   if (cmd) {
     // get the Command object
-    const cmdObj = cmds.get(cmd);
+    const cmdObj = ALLCOMMANDS.get(cmd);
 
     if (cmdObj) {
       // found the command
@@ -232,17 +231,40 @@ export function usageHelp(cmd?: string): void {
 };
 
 /**
- * Print missing command
+ * Prints missing or invalid command
  * @param passedIn Command that was passed in
  */
 export function usageMissingCommand(passedIn?: string): void {
   if (passedIn) {
+    // invalid command
     usageHeader();
-    console.log('');
 
+    console.log('');
     console.log(`\x1b[31m${passedIn}\x1b[0m is an invalid command`);
   } else {
+    // full usage since nothing was passed in
     usage();
+  }
+}
+
+/**
+ * Prints missing argument(s) for a Command (which means one or more expected CommandArgs were not set to non-empty value)
+ * @param cmd SelectedCommand object
+ */
+export function usageMissingArguments(cmd: SelectedCommand) {
+  usageHeader();
+
+  console.log('');
+  console.log(`\x1b[31mMissing one or more arguments for ${cmd.command}\x1b[0m`);
+
+  console.log('');
+  console.log(`  ${cmd.description}`);
+
+  if (cmd.args) {
+    cmd.args.forEach((cmdArgs: SelectedCommandArg) => {
+      usageCommand(cmd, cmdArgs);
+      usageCommandArgs(cmdArgs);
+    });
   }
 }
 
@@ -254,13 +276,13 @@ export function usage() {
   usageHeader();
 
   // get all of the commands usage
-  if (cmdsUsage.maxCmdLen > 0) {
+  if (maxCommandLen > 0) {
     console.log('');
     console.log(`${AppConstants.SCRIPTNAME} <command> <switches>`);
     console.log('');
 
-    cmdsUsage.cmdUsages.forEach((cmdUsage: [string, string]) => {
-      console.log(`  ${cmdUsage[0].padEnd(cmdsUsage.maxCmdLen, ' ')} : ${cmdUsage[1]}`);
+    ALLCOMMANDS.forEach((cmd: Command) => {
+      console.log(`  ${cmd.command.padEnd(maxCommandLen, ' ')} : ${cmd.description}`);
     });
   }
 

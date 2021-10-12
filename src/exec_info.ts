@@ -5,7 +5,6 @@
 /**
  * App Imports
  */
-import {AppConstants} from './constants';
 import {Command, CommandImpl, SelectedCommand} from './command';
 import {default as OutputModule} from './output';
 import {default as AppError, ErrorCodes} from './error';
@@ -26,7 +25,7 @@ const MODCMD = new CommandImpl('info', 'CIDR information given a full CIDR notat
 function initCommandArgs() {
   MODCMD.addArgument('cidr', ['-c', '--cidr'], 'CIDR notation', '<N.N.N.N>/<1-32>', /^(([0-9]|[1-9][0-9]|[1][0-9][0-9]|[2][0-5][0-5])\.){3}([0-9]|[1-9][0-9]|[1][0-9][0-9]|[2][0-5][0-5])\/([1-9]|[1-2][0-9]|[3][0-2])$/, '');
 
-  MODCMD.addArgument('ip', ['-i', '--ipv4'], 'IPv4 address (N is a number between 0 - 255)', '<N.N.N.N>', /^(([0-9]|[1-9][0-9]|[1][0-9][0-9]|[2][0-5][0-5])\.){3}([0-9]|[1-9][0-9]|[1][0-9][0-9]|[2][0-5][0-5])$/, '')
+  MODCMD.addArgument('ip', ['-i', '--ipv4'], 'IPv4 address (N is a number between 0 and 255)', '<N.N.N.N>', /^(([0-9]|[1-9][0-9]|[1][0-9][0-9]|[2][0-5][0-5])\.){3}([0-9]|[1-9][0-9]|[1][0-9][0-9]|[2][0-5][0-5])$/, '')
     .addArgument('cb', ['-cb', '--cidr-block'], 'CIDR block (number between 1 and 32)', '<1-32>', /^([1-9]|[1-2][0-9]|[3][0-2])$/, '');
 }
 
